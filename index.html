@@ -644,7 +644,7 @@ async function verifyWithServer(email, password) {
   return true;
 }
 
-// ── Load companies + statuses from server ─────────────────────────────────────
+// ── Load companies + statuses from server, fall back to Supabase cache ────────
 async function loadImplConfig() {
   const urls = ['/api/impl/config', 'http://localhost:3001/api/impl/config'];
   for (const url of urls) {
@@ -660,6 +660,22 @@ async function loadImplConfig() {
       }
     } catch(_) {}
   }
+  // Server unreachable (e.g. hosted externally) — load from Supabase team cache
+  try {
+    if (sess?.teamCode) {
+      const { data: team } = await sb.from('impl_teams').select('companies_cache,statuses_cache').eq('team_code', sess.teamCode).single();
+      if (team?.companies_cache) {
+        const cos = parseJSON(team.companies_cache);
+        if (cos.length) sess.companies = cos;
+      }
+      if (team?.statuses_cache) {
+        const sts = parseJSON(team.statuses_cache);
+        if (sts.length) sess.statuses = sts;
+      }
+      localStorage.setItem('sf_sess', JSON.stringify(sess));
+      return true;
+    }
+  } catch(_) {}
   return false;
 }
 
