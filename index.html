@@ -661,16 +661,15 @@ async function loadImplConfig() {
     } catch(_) {}
   }
   // Server unreachable (GitHub Pages) — load from Supabase impl_companies table
-  try {
-    if (sess?.teamCode) {
-      const { data: cos } = await sb.from('impl_companies').select('syncro_id,name,color').eq('team_code', sess.teamCode);
-      if (cos?.length) {
-        sess.companies = cos.map(c => ({ id: c.syncro_id, name: c.name, color: c.color }));
-        localStorage.setItem('sf_sess', JSON.stringify(sess));
-        return true;
-      }
+  if (sess?.teamCode) {
+    const { data: cos, error: cosErr } = await sb.from('impl_companies').select('syncro_id,name,color').eq('team_code', sess.teamCode);
+    showToast('DB: ' + (cosErr ? cosErr.message : (cos?.length + ' cos, tc=' + sess.teamCode)));
+    if (!cosErr && cos?.length) {
+      sess.companies = cos.map(c => ({ id: c.syncro_id, name: c.name, color: c.color }));
+      localStorage.setItem('sf_sess', JSON.stringify(sess));
+      return true;
     }
-  } catch(_) {}
+  }
   return false;
 }
 
