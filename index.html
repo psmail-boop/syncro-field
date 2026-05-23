@@ -656,32 +656,19 @@ async function loadImplConfig() {
         sess.companies = d.companies;
         if (d.statuses?.length) sess.statuses = d.statuses;
         localStorage.setItem('sf_sess', JSON.stringify(sess));
-        // Cache to Supabase so external (GitHub Pages) users can load companies
-        if (sess?.teamCode) {
-          try {
-            await sb.from('impl_teams')
-              .update({ companies_cache: d.companies, statuses_cache: d.statuses || [] })
-              .eq('team_code', sess.teamCode);
-          } catch(_) {}
-        }
         return true;
       }
     } catch(_) {}
   }
-  // Server unreachable (e.g. hosted externally) — load from Supabase team cache
+  // Server unreachable (GitHub Pages) — load from Supabase impl_companies table
   try {
     if (sess?.teamCode) {
-      const { data: team } = await sb.from('impl_teams').select('companies_cache,statuses_cache').eq('team_code', sess.teamCode).single();
-      if (team?.companies_cache) {
-        const cos = parseJSON(team.companies_cache);
-        if (cos.length) sess.companies = cos;
+      const { data: cos } = await sb.from('impl_companies').select('syncro_id,name,color').eq('team_code', sess.teamCode);
+      if (cos?.length) {
+        sess.companies = cos.map(c => ({ id: c.syncro_id, name: c.name, color: c.color }));
+        localStorage.setItem('sf_sess', JSON.stringify(sess));
+        return true;
       }
-      if (team?.statuses_cache) {
-        const sts = parseJSON(team.statuses_cache);
-        if (sts.length) sess.statuses = sts;
-      }
-      localStorage.setItem('sf_sess', JSON.stringify(sess));
-      return true;
     }
   } catch(_) {}
   return false;
@@ -1041,16 +1028,21 @@ async function applyStatus() {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 async function loadTeamConfig(teamCode) {
-  const { data } = await sb.from('impl_teams').select('*').eq('team_code', teamCode).single();
-  return data;
+  const [{ data: team }, { data: cos }] = await Promise.all([
+    sb.from('impl_teams').select('*').eq('team_code', teamCode).single(),
+    sb.from('impl_companies').select('syncro_id,name,color').eq('team_code', teamCode)
+  ]);
+  return { team, companies: cos || [] };
 }
-function buildSession(user, team) {
+function buildSession(user, teamData) {
+  const team = teamData?.team;
+  const companies = (teamData?.companies || []).map(c => ({ id: c.syncro_id, name: c.name, color: c.color }));
   return {
     userId: user.id, name: user.full_name, email: user.email,
     teamCode: user.team_code, teamName: team?.team_name || user.team_code,
     syncroUserId: user.syncro_user_id, isApproved: user.is_approved,
     tfsUsername: user.tfs_username || '', tfsPassword: user.tfs_password || '',
-    companies: parseJSON(team?.companies_cache), statuses: parseJSON(team?.statuses_cache)
+    companies, statuses: parseJSON(team?.statuses_cache)
   };
 }
 function parseJSON(val) {
