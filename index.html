@@ -656,6 +656,14 @@ async function loadImplConfig() {
         sess.companies = d.companies;
         if (d.statuses?.length) sess.statuses = d.statuses;
         localStorage.setItem('sf_sess', JSON.stringify(sess));
+        // Cache to Supabase so external (GitHub Pages) users can load companies
+        if (sess?.teamCode) {
+          try {
+            await sb.from('impl_teams')
+              .update({ companies_cache: d.companies, statuses_cache: d.statuses || [] })
+              .eq('team_code', sess.teamCode);
+          } catch(_) {}
+        }
         return true;
       }
     } catch(_) {}
